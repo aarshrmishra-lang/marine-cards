@@ -258,7 +258,7 @@ function getWorker() {
       logger: m => ocrProgress(m)
     });
     await w.setParameters({ tessedit_pageseg_mode: "3", preserve_interword_spaces: "1" });
-    try { localStorage.setItem("engineReady", "1"); } catch (_) {}
+    try { localStorage.setItem("marine-cards:engineReady", "1"); } catch (_) {}
     return w;
   })();
   workerP.catch(() => { workerP = null; });
@@ -567,7 +567,7 @@ $("expJson").addEventListener("click", async () => {
   }
   const body = { app: "Marine Contacts Register", version: 2, exported: new Date().toISOString(), cards, ...(photos ? { photos } : {}) };
   if (await saveFile(`marine-contacts-${stamp()}.json`, new Blob([JSON.stringify(body)], { type: "application/json" }))) {
-    try { localStorage.setItem("lastBackup", new Date().toISOString()); } catch (_) {}
+    try { localStorage.setItem("marine-cards:lastBackup", new Date().toISOString()); } catch (_) {}
     toast("Backup exported"); updateBackupInfo();
   }
 });
@@ -583,6 +583,7 @@ $("impFile").addEventListener("change", async e => {
   let j;
   try { j = JSON.parse(await f.text()); } catch (_) { toast("That file isn't a register backup. Choose the .json backup file.", 4000); return; }
   const arr = Array.isArray(j) ? j : j.cards;
+  if (j && j.app === "omp17-01h") { toast("That is an SI Attendance Report sync file. Import it in the SI Report app instead.", 5000); return; }
   if (!Array.isArray(arr)) { toast("That file isn't a register backup. Choose the .json backup file.", 4000); return; }
   const byId = new Map(cards.map(c => [c.id, c]));
   let added = 0, updated = 0;
@@ -624,9 +625,9 @@ $("wipeBtn").addEventListener("click", async () => {
   closeSheet("bkSheet"); refresh(); toast("All cards deleted from this device");
 });
 async function updateBackupInfo() {
-  let ready = false; try { ready = localStorage.getItem("engineReady") === "1"; } catch (_) {}
+  let ready = false; try { const c = await caches.open("marine-cards-engine-5.1.1"); ready = !!(await c.match(ENGINE.worker)) && !!(await c.match(ENGINE.core(hasSimd()))) && localStorage.getItem("marine-cards:engineReady") === "1"; } catch (_) {}
   $("engineState").textContent = ready ? "Ready. Card reading works on this device without internet." : "The card reader downloads once (about 6 MB) the first time you scan. Tap below to get it now so scanning also works offline.";
-  let last = null; try { last = localStorage.getItem("lastBackup"); } catch (_) {}
+  let last = null; try { last = localStorage.getItem("marine-cards:lastBackup"); } catch (_) {}
   let s = `${cards.length} cards, ${photoIds.size} with photos. `;
   try { if (navigator.storage && navigator.storage.estimate) { const est = await navigator.storage.estimate(); s += `Using ${(est.usage / 1048576).toFixed(1)} MB. `; } } catch (_) {}
   try { if (navigator.storage && navigator.storage.persisted) s += (await navigator.storage.persisted()) ? "Storage is protected from automatic clean-up. " : ""; } catch (_) {}
