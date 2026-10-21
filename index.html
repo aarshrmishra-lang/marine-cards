@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Marine Contacts Register</title>
+<meta name="description" content="Search, index and scan business cards. Works offline.">
+<meta name="theme-color" content="#0f2233">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Marine Cards">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+/* Layout: ship's-register directory. Sticky search bar; company index rail on wide screens, a sheet on phones; scan button always in reach. */
+:root{
+  --bg:#eef2f5; --paper:#ffffff; --ink:#0f2233; --muted:#5a6b7a; --line:#d3dce4;
+  --accent:#0b6e8a; --accent-ink:#ffffff; --flag:#f2b705; --flag-ink:#1a1400;
+  --warn-bg:#fff4d6; --warn-fg:#7a5600; --ok-bg:#e1f3e8; --ok-fg:#1d6b3a;
+  --hl:#ffe78a; --danger:#b3261e; --chip:#e3edf3; --scrim:rgba(5,15,25,.55); --bar:#0f2233; --bar-ink:#eef2f5;
+  --display:"Avenir Next Condensed","Roboto Condensed","Arial Narrow","Helvetica Neue",Arial,sans-serif;
+  --body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0b1620; --paper:#12212e; --ink:#e4edf3; --muted:#93a6b6; --line:#24384a;
+  --accent:#4fb6d3; --accent-ink:#06202a; --flag:#f2c230; --flag-ink:#1a1400;
+  --warn-bg:#3a2f0e; --warn-fg:#f5d77a; --ok-bg:#12321f; --ok-fg:#8fe0ad;
+  --hl:#6b5a12; --danger:#ff8a80; --chip:#1b3042; --scrim:rgba(0,0,0,.6); --bar:#06111a; --bar-ink:#e4edf3; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0b1620; --paper:#12212e; --ink:#e4edf3; --muted:#93a6b6; --line:#24384a;
+  --accent:#4fb6d3; --accent-ink:#06202a; --flag:#f2c230; --flag-ink:#1a1400;
+  --warn-bg:#3a2f0e; --warn-fg:#f5d77a; --ok-bg:#12321f; --ok-fg:#8fe0ad;
+  --hl:#6b5a12; --danger:#ff8a80; --chip:#1b3042; --scrim:rgba(0,0,0,.6); --bar:#06111a; --bar-ink:#e4edf3; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%;min-height:100vh}
+button,input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a{color:var(--accent)}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:10;background:var(--bar);color:var(--bar-ink);padding:calc(env(safe-area-inset-top,0px) + 10px) max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px))}
+.top-in{max-width:1240px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 auto}
+.flag{width:20px;height:20px;flex:none;background:linear-gradient(135deg,var(--flag) 50%,#0b6e8a 50%);border-radius:2px}
+h1{font-family:var(--display);font-weight:700;font-size:1.35rem;letter-spacing:.03em;margin:0;text-transform:uppercase;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.count{font-family:var(--mono);font-size:.75rem;opacity:.7;white-space:nowrap}
+.searchrow{flex:1 1 100%;display:flex;gap:8px;min-width:0;order:3}
+#q{flex:1;min-width:0;border:0;border-radius:8px;padding:11px 12px;background:var(--paper);color:var(--ink);font-size:16px}
+.tbtn{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.25);background:transparent;color:var(--bar-ink);border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600;white-space:nowrap}
+.tbtn.primary{background:var(--flag);color:var(--flag-ink);border-color:var(--flag)}
+.tbtn svg{width:18px;height:18px}
+.desk-only{display:none}
+@media (min-width:860px){
+  .searchrow{flex:1 1 360px;order:0}
+  .brand{flex:0 1 auto}
+  .desk-only{display:inline-flex}
+  .phone-only{display:none!important}
+  h1{font-size:1.45rem}
+  .count{display:none}
+}
+@media (min-width:1500px){.count{display:inline}}
+
+/* layout */
+.wrap{max-width:1240px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(110px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start}
+@media (min-width:860px){.wrap{grid-template-columns:270px minmax(0,1fr);padding-bottom:48px}}
+.rail{display:none}
+@media (min-width:860px){.rail{display:block;position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto;background:var(--paper);border:1px solid var(--line);border-radius:10px}}
+.rail h2,.sheet-h{font-family:var(--display);font-size:1rem;letter-spacing:.08em;text-transform:uppercase;margin:0;color:var(--muted);display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.rail h2{padding:12px 14px 8px;position:sticky;top:0;background:var(--paper)}
+.rail h2 span,.sheet-h span{font-family:var(--mono);font-size:.75rem;letter-spacing:0}
+.idx{list-style:none;margin:0;padding:0 6px 10px}
+.idx .letter{font-family:var(--display);font-weight:700;color:var(--accent);padding:8px 8px 2px;font-size:.95rem}
+.idx button{display:flex;width:100%;justify-content:space-between;gap:8px;text-align:left;border:0;background:transparent;padding:7px 8px;border-radius:6px;cursor:pointer;line-height:1.25}
+.idx button:hover{background:var(--chip)}
+.idx button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.idx .n{font-family:var(--mono);font-size:.75rem;opacity:.7;font-variant-numeric:tabular-nums}
+
+.status{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:4px;background:var(--chip);color:var(--ink);border-radius:999px;padding:3px 4px 3px 12px;font-size:.85rem;max-width:100%}
+.pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill button{border:0;background:transparent;cursor:pointer;color:var(--muted);font-size:1.1rem;line-height:1;padding:2px 8px}
+.linkbtn{border:0;background:transparent;color:var(--accent);font-weight:600;cursor:pointer;padding:4px 0}
+
+.group{margin-bottom:22px}
+.group h3{font-family:var(--display);font-weight:700;font-size:1.2rem;margin:0 0 8px;display:flex;gap:10px;align-items:baseline;border-bottom:2px solid var(--ink);padding-bottom:3px}
+.group h3 .n{font-family:var(--mono);font-size:.75rem;color:var(--muted);font-weight:400}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:10px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.card .head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.card .who{min-width:0;flex:1}
+.card .nm{font-weight:700;font-size:1.05rem;line-height:1.25}
+.card .loc{font-weight:400;color:var(--muted);margin-left:6px}
+.card .role{color:var(--muted);font-size:.9rem}
+.card .co{font-size:.85rem}
+.thumb{width:64px;height:40px;border-radius:4px;object-fit:cover;border:1px solid var(--line);cursor:zoom-in;flex:none;background:var(--chip)}
+.rows{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 10px;font-size:.88rem;margin:2px 0 0}
+.rows dt{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding-top:3px}
+.rows dd{margin:0;font-family:var(--mono);font-size:.84rem;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.rows dd.txt{font-family:var(--body);font-size:.88rem}
+.rows a{text-decoration:none}
+.copy{border:0;background:transparent;color:var(--accent);cursor:pointer;font-size:.72rem;padding:2px 4px;font-family:var(--body);font-weight:600}
+.flagnote{background:var(--warn-bg);color:var(--warn-fg);font-size:.78rem;border-radius:4px;padding:2px 8px;align-self:flex-start}
+.meta{font-family:var(--mono);font-size:.7rem;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:auto;padding-top:6px;border-top:1px dashed var(--line)}
+.meta .acts{display:flex;gap:2px}
+.ghost{border:0;background:transparent;color:var(--muted);padding:4px 8px;border-radius:6px;cursor:pointer;font-weight:600;font-family:var(--body);font-size:.85rem}
+.ghost:hover{background:var(--chip);color:var(--ink)}
+mark{background:var(--hl);color:inherit;border-radius:2px}
+.empty{background:var(--paper);border:1px dashed var(--line);border-radius:10px;padding:28px 20px;text-align:center;color:var(--muted)}
+.empty h2{font-family:var(--display);color:var(--ink);margin:0 0 6px;font-size:1.5rem}
+.empty .acts{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:16px}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:8px;padding:10px 16px;cursor:pointer;font-weight:600;white-space:nowrap;min-height:44px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.flagb{background:var(--flag);color:var(--flag-ink);border-color:var(--flag)}
+.btn.danger{color:var(--danger);border-color:var(--danger);background:transparent}
+.btn svg{width:20px;height:20px}
+.btn[disabled]{opacity:.55;cursor:default}
+
+/* floating scan button (phones) */
+.fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:15;display:flex;gap:10px}
+.fab button{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:14px 20px;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;font-size:1rem}
+.fab .scan{background:var(--flag);color:var(--flag-ink)}
+.fab .idxb{background:var(--paper);color:var(--ink);border:1px solid var(--line)}
+.fab svg{width:22px;height:22px}
+@media (min-width:860px){.fab{display:none}}
+
+/* sheets / dialogs */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:30;display:flex;align-items:flex-end;justify-content:center}
+@media (min-width:700px){.scrim{align-items:flex-start;padding:28px 16px;overflow:auto}}
+.sheet{background:var(--paper);color:var(--ink);width:100%;max-width:760px;border-radius:16px 16px 0 0;max-height:92vh;overflow:auto;padding:18px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));border-top:6px solid var(--flag)}
+@media (min-width:700px){.sheet{border-radius:12px;max-height:none;padding:22px}}
+.sheet h2{font-family:var(--display);font-size:1.45rem;margin:0 0 4px;text-transform:uppercase;letter-spacing:.03em}
+.sheet p.hint{margin:0 0 14px;color:var(--muted);font-size:.9rem}
+.sheet-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.x{border:0;background:var(--chip);border-radius:999px;width:36px;height:36px;font-size:1.3rem;cursor:pointer;flex:none;line-height:1}
+
+.scanbox{display:grid;gap:14px}
+@media (min-width:700px){.scanbox.has-photo{grid-template-columns:240px minmax(0,1fr)}}
+.photos{display:flex;flex-direction:column;gap:8px}
+.photos img{width:100%;border-radius:8px;border:1px solid var(--line);background:var(--chip);cursor:zoom-in}
+.photos .ph-acts{display:flex;flex-wrap:wrap;gap:6px}
+.photos .ph-acts .btn{padding:6px 10px;min-height:36px;font-size:.85rem}
+.pick{display:grid;gap:10px;grid-template-columns:1fr 1fr}
+.pick .btn{min-height:84px;flex-direction:column;font-size:1rem}
+.pick .btn svg{width:28px;height:28px}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:16px;text-align:center;color:var(--muted);font-size:.9rem}
+.drop.over{border-color:var(--accent);background:var(--chip)}
+.progress{display:flex;flex-direction:column;gap:8px;padding:14px;background:var(--chip);border-radius:10px}
+.bar{height:8px;background:var(--line);border-radius:999px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s}
+.notice{border-radius:8px;padding:10px 12px;font-size:.9rem}
+.notice.warn{background:var(--warn-bg);color:var(--warn-fg)}
+.notice.ok{background:var(--ok-bg);color:var(--ok-fg)}
+.notice .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+
+.fgrid{display:grid;grid-template-columns:1fr;gap:10px 14px}
+@media (min-width:560px){.fgrid{grid-template-columns:1fr 1fr}}
+.f{display:flex;flex-direction:column;gap:3px;min-width:0}
+.f.full{grid-column:1/-1}
+.f label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:flex;gap:6px;align-items:center}
+.f label .auto{font-size:.65rem;letter-spacing:.04em;background:var(--warn-bg);color:var(--warn-fg);border-radius:3px;padding:0 5px}
+.f input,.f textarea{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg);min-width:0;font-size:16px}
+.f input.filled,.f textarea.filled{border-color:var(--flag)}
+.f textarea{min-height:64px;resize:vertical}
+.chk{display:flex;gap:8px;align-items:center;font-size:.92rem}
+.chk input{width:20px;height:20px}
+details.raw{font-size:.85rem;color:var(--muted)}
+details.raw pre{white-space:pre-wrap;font-family:var(--mono);font-size:.78rem;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;max-height:220px;overflow:auto;color:var(--ink)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:16px}
+.actions .left{margin-right:auto}
+.err{color:var(--danger);font-size:.9rem;margin-top:8px}
+
+.bk{display:grid;gap:12px}
+.bk section{border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.bk h3{margin:0 0 6px;font-size:1rem}
+.bk p{margin:0 0 10px;color:var(--muted);font-size:.9rem}
+.bk .row{display:flex;flex-wrap:wrap;gap:8px}
+.stat{font-family:var(--mono);font-size:.8rem}
+
+.viewer{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:20px}
+.viewer img{max-width:100%;max-height:100%;border-radius:6px}
+.viewer button{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:12px}
+
+.toast{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:50;font-size:.92rem;max-width:calc(100vw - 32px);text-align:center}
+@media (min-width:860px){.toast{bottom:24px}}
+.banner{background:var(--accent);color:var(--accent-ink);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;font-size:.9rem}
+.banner button{border:1px solid currentColor;background:transparent;color:inherit;border-radius:6px;padding:4px 10px;font-weight:700;cursor:pointer}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="banner" id="updateBar" hidden>A new version of the app is ready. <button type="button" id="updateBtn">Update now</button></div>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><span class="flag" aria-hidden="true"></span><h1>Marine Contacts Register</h1></div>
+    <span class="count" id="count"></span>
+    <div class="searchrow">
+      <input id="q" type="search" placeholder="Search name, company, email, phone…" autocomplete="off" enterkeyhint="search" aria-label="Search contacts">
+    </div>
+    <button class="tbtn primary desk-only" id="scanBtnD" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="7" y="8" width="10" height="8" rx="1"/></svg>Scan card</button>
+    <button class="tbtn desk-only" id="addBtnD" type="button" title="Add a card by typing">+ Add</button>
+    <button class="tbtn" id="menuBtn" type="button" aria-label="Backup and settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span class="desk-only">Backup</span></button>
+    <button class="tbtn" id="installBtn" type="button" hidden>Install app</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <aside class="rail" aria-label="Company index">
+    <h2>Company index <span id="ccount"></span></h2>
+    <ul class="idx" id="idx"></ul>
+  </aside>
+  <section style="min-width:0" aria-live="polite">
+    <div class="status" id="status"></div>
+    <div id="list"><div class="empty">Opening your register…</div></div>
+  </section>
+</main>
+
+<div class="fab">
+  <button type="button" class="idxb" id="idxBtnM"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7"/></svg>Companies</button>
+  <button type="button" class="scan" id="scanBtnM"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>Scan card</button>
+</div>
+
+<!-- Company index sheet (phones) -->
+<div class="scrim" id="idxSheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="idxTitle">
+    <div class="sheet-top"><div class="sheet-h" id="idxTitle">Company index <span id="ccount2"></span></div><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <ul class="idx" id="idx2"></ul>
+  </div>
+</div>
+
+<!-- Scan / add / edit sheet -->
+<div class="scrim" id="formSheet" hidden>
+  <form class="sheet" id="form" novalidate role="dialog" aria-modal="true" aria-labelledby="fTitle">
+    <div class="sheet-top"><div><h2 id="fTitle">Scan a card</h2><p class="hint" id="fHint">Take a photo of the card. The app reads it on this device and fills in the details for you to check.</p></div><button class="x" type="button" data-close aria-label="Close">×</button></div>
+
+    <div id="pickStep">
+      <div class="pick">
+        <button class="btn flagb" type="button" id="takePhoto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>Take photo</button>
+        <button class="btn" type="button" id="choosePhoto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>Choose photo</button>
+      </div>
+      <div class="drop" id="drop" style="margin-top:10px">Or drop a card photo here, or paste one with Ctrl/Cmd+V.</div>
+      <p class="hint" style="margin-top:10px">Tips: lay the card flat in good light, fill the frame, and avoid glare. Tap <b>Rotate</b> afterwards if it was read sideways.</p>
+      <div style="margin-top:6px"><button class="linkbtn" type="button" id="skipPhoto">Type the details instead</button></div>
+    </div>
+    <input type="file" id="camInput" accept="image/*" capture="environment" hidden>
+    <input type="file" id="fileInput" accept="image/*" hidden>
+    <input type="file" id="backInput" accept="image/*" hidden>
+
+    <div class="scanbox" id="formStep" hidden>
+      <div class="photos" id="photoCol" hidden>
+        <img id="frontImg" alt="Front of the card">
+        <img id="backImg" alt="Back of the card" hidden>
+        <div class="ph-acts">
+          <button class="btn" type="button" id="rotateBtn" title="Rotate and read again">↻ Rotate</button>
+          <button class="btn" type="button" id="retakeBtn">Retake</button>
+          <button class="btn" type="button" id="backBtn">+ Back side</button>
+          <button class="btn" type="button" id="removePhotoBtn" hidden>Remove photo</button>
+        </div>
+      </div>
+      <div style="min-width:0">
+        <div class="progress" id="progress" hidden><div id="progText">Reading the card…</div><div class="bar"><i id="progBar"></i></div></div>
+        <div class="notice warn" id="readNote" hidden></div>
+        <div class="notice warn" id="dupNote" hidden></div>
+        <div class="fgrid" id="fields" style="margin-top:10px">
+          <div class="f"><label for="f_name">Name *</label><input id="f_name" autocomplete="off"></div>
+          <div class="f"><label for="f_name_local">Name (local script)</label><input id="f_name_local" autocomplete="off"></div>
+          <div class="f"><label for="f_company">Company (index entry) *</label><input id="f_company" list="coList" autocomplete="off"></div>
+          <div class="f"><label for="f_company_full">Full company name</label><input id="f_company_full" autocomplete="off"></div>
+          <div class="f"><label for="f_title">Title</label><input id="f_title" autocomplete="off"></div>
+          <div class="f"><label for="f_department">Department</label><input id="f_department" autocomplete="off"></div>
+          <div class="f"><label for="f_mobile">Mobile</label><input id="f_mobile" inputmode="tel" autocomplete="off"></div>
+          <div class="f"><label for="f_phone">Phone</label><input id="f_phone" inputmode="tel" autocomplete="off"></div>
+          <div class="f"><label for="f_email">Email</label><input id="f_email" inputmode="email" autocomplete="off" autocapitalize="off"></div>
+          <div class="f"><label for="f_fax">Fax</label><input id="f_fax" inputmode="tel" autocomplete="off"></div>
+          <div class="f"><label for="f_website">Website</label><input id="f_website" autocomplete="off" autocapitalize="off"></div>
+          <div class="f"><label for="f_country">Country</label><input id="f_country" autocomplete="off"></div>
+          <div class="f full"><label for="f_address">Address</label><textarea id="f_address"></textarea></div>
+          <div class="f full"><label for="f_notes">Notes (where you met, what they handle…)</label><textarea id="f_notes"></textarea></div>
+          <label class="chk f full"><input type="checkbox" id="f_uncertain"> Some details need checking against the card</label>
+        </div>
+        <details class="raw" id="rawBox" hidden><summary>Text read from the card</summary><pre id="rawText"></pre></details>
+        <div class="err" id="ferr" hidden></div>
+        <div class="actions">
+          <button class="btn danger left" type="button" id="delBtn" hidden>Delete card</button>
+          <button class="btn" type="button" data-close>Cancel</button>
+          <button class="btn primary" type="submit" id="saveBtn">Save card</button>
+        </div>
+      </div>
+    </div>
+    <datalist id="coList"></datalist>
+  </form>
+</div>
+
+<!-- Backup sheet -->
+<div class="scrim" id="bkSheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="bkTitle">
+    <div class="sheet-top"><div><h2 id="bkTitle">Backup &amp; settings</h2><p class="hint">Your cards are stored only on this device. Export a backup regularly, and use it to copy your cards to your other devices.</p></div><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <div class="bk">
+      <section>
+        <h3>Back up</h3>
+        <p>Saves every card to a file you can keep in email, Google Drive, iCloud or OneDrive.</p>
+        <label class="chk" style="margin-bottom:10px"><input type="checkbox" id="incPhotos"> Include card photos (bigger file)</label>
+        <div class="row"><button class="btn primary" type="button" id="expJson">Export backup</button><button class="btn" type="button" id="expCsv">Export for Excel (.csv)</button></div>
+      </section>
+      <section>
+        <h3>Restore or add cards from a file</h3>
+        <p>Choose a backup file from this app or the one Claude sent you. Cards already here are kept; matching cards are updated.</p>
+        <div class="row"><button class="btn" type="button" id="impBtn">Import backup…</button></div>
+        <input type="file" id="impFile" accept=".json,application/json" hidden>
+      </section>
+      <section>
+        <h3>Card reading</h3>
+        <p id="engineState">Checking…</p>
+        <div class="row"><button class="btn" type="button" id="prepBtn">Get ready for offline scanning</button></div>
+      </section>
+      <section>
+        <h3>Storage</h3>
+        <p class="stat" id="storeState">…</p>
+        <div class="row"><button class="btn danger" type="button" id="wipeBtn">Delete all cards on this device</button></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="viewer" id="viewer" hidden><img id="viewerImg" alt="Card photo"><button class="x" type="button" id="viewerClose" aria-label="Close">×</button></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script src="parse.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
