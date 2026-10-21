@@ -689,8 +689,9 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     reg.addEventListener("updatefound", () => watch(reg.installing));
     $("updateBtn").onclick = () => { (reg.waiting || reg.installing)?.postMessage("skipWaiting"); };
   }).catch(() => {});
-  let reloaded = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => { if (!reloaded) { reloaded = true; location.reload(); } });
+  let reloaded = false; const hadController = !!navigator.serviceWorker.controller;
+  // an update took over: reload once so the page runs the new version (not on the very first visit)
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
 }
 
 load();

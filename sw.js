@@ -1,5 +1,5 @@
 /* Offline support: keeps the app and the card-reading engine on the device. */
-const VERSION = "v1.1.0";
+const VERSION = "v1.1.1";
 const APP_CACHE = "marine-cards-app-" + VERSION;
 const ENGINE_CACHE = "marine-cards-engine-5.1.1";
 
@@ -29,6 +29,7 @@ self.addEventListener("install", event => {
         if (res.ok) await engine.put(url, res);
       } catch (e) { /* will be fetched on first scan */ }
     }));
+    await self.skipWaiting();   // apply updates straight away
   })());
 });
 
@@ -68,7 +69,7 @@ self.addEventListener("fetch", event => {
   if (req.mode === "navigate") {
     event.respondWith((async () => {
       try {
-        const res = await fetch(req);
+        const res = await fetch(req, { cache: "no-cache" });
         const cache = await caches.open(APP_CACHE);
         cache.put("./index.html", res.clone());
         return res;
@@ -79,16 +80,27 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  // App files: cache first.
-  event.respondWith((async () => {
-    const hit = await caches.match(req, { ignoreSearch: true });
-    if (hit) return hit;
-    try {
+  // Card-reading data: cache first (large, rarely changes).
+  if (url.pathname.includes("/lang/") || url.pathname.includes("/icons/")) {
+    event.respondWith((async () => {
+      const hit = await caches.match(req, { ignoreSearch: true });
+      if (hit) return hit;
       const res = await fetch(req);
       if (res.ok && res.type === "basic") (await caches.open(APP_CACHE)).put(req, res.clone());
       return res;
+    })());
+    return;
+  }
+
+  // App code: newest version when online, cached copy when offline.
+  event.respondWith((async () => {
+    try {
+      const res = await fetch(req, { cache: "no-cache" });
+      if (res.ok && res.type === "basic") (await caches.open(APP_CACHE)).put(req, res.clone());
+      return res;
     } catch (e) {
-      return new Response("Offline", { status: 503, statusText: "Offline" });
+      const hit = await caches.match(req, { ignoreSearch: true });
+      return hit || new Response("Offline", { status: 503, statusText: "Offline" });
     }
   })());
 });
