@@ -1,5 +1,5 @@
 /* Offline support: keeps the app and the card-reading engine on the device. */
-const VERSION = "v1.2.0";
+const VERSION = "v1.2.1";
 const APP_CACHE = "marine-cards-app-" + VERSION;
 const ENGINE_CACHE = "marine-cards-engine-5.1.1";
 

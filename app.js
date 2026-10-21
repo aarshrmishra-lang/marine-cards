@@ -389,6 +389,7 @@ async function handlePhoto(file, side) {
   if (img.src && img.src.startsWith("blob:") && !img.dataset.keep) URL.revokeObjectURL(img.src);
   img.dataset.keep = ""; img.src = URL.createObjectURL(stored); img.hidden = false;
   if (side === "front") current.rotate = 0;
+  if (!current.front && !$("frontImg").getAttribute("src")) $("frontImg").hidden = true;   // back side only
   setPhotoButtons(true);
   setStep("form"); $("photoCol").hidden = false; $("formStep").classList.add("has-photo"); $("fHint").hidden = true;
   runRead(side);
