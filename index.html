@@ -193,8 +193,19 @@ details.raw pre{white-space:pre-wrap;font-family:var(--mono);font-size:.78rem;ba
 @media (min-width:860px){.toast{bottom:24px}}
 .banner{background:var(--accent);color:var(--accent-ink);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;font-size:.9rem}
 .banner button{border:1px solid currentColor;background:transparent;color:inherit;border-radius:6px;padding:4px 10px;font-weight:700;cursor:pointer}
+.inst{display:grid;gap:10px}
+.inst section{border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.inst section.mine{border-color:var(--flag);border-width:2px}
+.inst h3{margin:0 0 6px;font-size:1rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.inst h3 .tag{font-size:.7rem;background:var(--flag);color:var(--flag-ink);border-radius:4px;padding:1px 6px;letter-spacing:.04em;text-transform:uppercase}
+.inst ol{margin:0;padding-left:20px;display:grid;gap:4px}
+.inst details summary{cursor:pointer;color:var(--accent);font-weight:600;margin-top:4px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
+<script>
+  window.__installEvt = null;
+  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); window.__installEvt = e; document.documentElement.classList.add("can-install"); });
+</script>
 </head>
 <body>
 <div class="banner" id="updateBar" hidden>A new version of the app is ready. <button type="button" id="updateBtn">Update now</button></div>
@@ -209,7 +220,7 @@ details.raw pre{white-space:pre-wrap;font-family:var(--mono);font-size:.78rem;ba
     <button class="tbtn primary desk-only" id="scanBtnD" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="7" y="8" width="10" height="8" rx="1"/></svg>Scan card</button>
     <button class="tbtn desk-only" id="addBtnD" type="button" title="Add a card by typing">+ Add</button>
     <button class="tbtn" id="menuBtn" type="button" aria-label="Backup and settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span class="desk-only">Backup</span></button>
-    <button class="tbtn" id="installBtn" type="button" hidden>Install app</button>
+    <button class="tbtn primary" id="installBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 7v7M9 11l3 3 3-3"/></svg>Install app</button>
   </div>
 </header>
 
@@ -301,6 +312,16 @@ details.raw pre{white-space:pre-wrap;font-family:var(--mono);font-size:.78rem;ba
 </div>
 
 <!-- Backup sheet -->
+<!-- Install sheet -->
+<div class="scrim" id="instSheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="instTitle">
+    <div class="sheet-top"><div><h2 id="instTitle">Install the app</h2><p class="hint">Installing puts Marine Contacts Register on your home screen or in your apps list. It opens in its own window and works without internet.</p></div><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <div class="notice ok" id="instReady" hidden>This browser can install the app in one step.<div class="acts"><button class="btn primary" type="button" id="instNow">Install now</button></div></div>
+    <div class="inst" id="instSteps"></div>
+    <p class="hint" style="margin-top:12px">After installing, open the app from your home screen or apps list, then use <b>Import backup file</b> to load your cards on that device.</p>
+  </div>
+</div>
+
 <div class="scrim" id="bkSheet" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="bkTitle">
     <div class="sheet-top"><div><h2 id="bkTitle">Backup &amp; settings</h2><p class="hint">Your cards are stored only on this device. Export a backup regularly, and use it to copy your cards to your other devices.</p></div><button class="x" type="button" data-close aria-label="Close">×</button></div>

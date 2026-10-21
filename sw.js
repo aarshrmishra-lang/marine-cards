@@ -1,5 +1,5 @@
 /* Offline support: keeps the app and the card-reading engine on the device. */
-const VERSION = "v1.0.0";
+const VERSION = "v1.1.0";
 const APP_CACHE = "marine-cards-app-" + VERSION;
 const ENGINE_CACHE = "marine-cards-engine-5.1.1";
 
@@ -19,7 +19,7 @@ const ENGINE_FILES = [
 self.addEventListener("install", event => {
   event.waitUntil((async () => {
     const app = await caches.open(APP_CACHE);
-    await app.addAll(APP_FILES);
+    await app.addAll(APP_FILES.map(u => new Request(u, { cache: "reload" })));
     // The engine is large and comes from a CDN: fetch it in the background, never fail install over it.
     const engine = await caches.open(ENGINE_CACHE);
     await Promise.all(ENGINE_FILES.map(async url => {

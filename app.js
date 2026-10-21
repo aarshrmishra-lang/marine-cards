@@ -130,7 +130,7 @@ function render() {
   if (!cards.length) {
     $("list").innerHTML = `<div class="empty"><h2>Your register is empty</h2>
       <p>Import the backup file Claude sent you to load your existing cards, or scan your first card.</p>
-      <div class="acts"><button class="btn primary" type="button" data-act="import">Import backup file</button><button class="btn flagb" type="button" data-act="scan">Scan a card</button></div></div>`;
+      <div class="acts"><button class="btn primary" type="button" data-act="import">Import backup file</button><button class="btn flagb" type="button" data-act="scan">Scan a card</button>${isInstalled() ? "" : `<button class="btn" type="button" data-act="install">Install the app</button>`}</div></div>`;
     return;
   }
   if (!rows.length) { $("list").innerHTML = `<div class="empty">No contact matches “${esc(query)}”${coFilter ? ` at ${esc(coFilter)}` : ""}. Try part of a name, a company, or the last digits of a phone number.</div>`; return; }
@@ -197,6 +197,7 @@ $("list").addEventListener("click", async e => {
   const act = e.target.closest("[data-act]");
   if (act && act.dataset.act === "import") $("impFile").click();
   if (act && act.dataset.act === "scan") openScan();
+  if (act && act.dataset.act === "install") $("installBtn").click();
 });
 function showPhoto(src) { if (!src) return; $("viewerImg").src = src; $("viewer").hidden = false; }
 $("viewer").addEventListener("click", () => $("viewer").hidden = true);
@@ -634,15 +635,52 @@ async function updateBackupInfo() {
 }
 
 /* ---------- install & updates ---------- */
-let installEvt = null;
-window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("installBtn").hidden = false; });
+const UA = navigator.userAgent;
+const PLATFORM = /iPhone|iPod/.test(UA) ? "iphone" : (/iPad/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1)) ? "ipad"
+  : /Android/.test(UA) ? "android" : /Macintosh/.test(UA) ? "mac" : /Windows/.test(UA) ? "windows" : "other";
+const BROWSER = /EdgA?\//.test(UA) ? "edge" : /SamsungBrowser/.test(UA) ? "samsung" : /CriOS/.test(UA) ? "chrome-ios" : /FxiOS|Firefox/.test(UA) ? "firefox"
+  : /Chrome\//.test(UA) ? "chrome" : /Safari\//.test(UA) ? "safari" : "other";
+const isInstalled = () => window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: window-controls-overlay)").matches || navigator.standalone === true;
+const INSTALL_GUIDES = [
+  { id: "iphone", title: "iPhone", steps: ["Open this page in <b>Safari</b> (in Chrome on iPhone you can also use the Share button).", "Tap the <b>Share</b> button (the square with an arrow pointing up) at the bottom or top of the screen.", "Scroll down and tap <b>Add to Home Screen</b>.", "Tap <b>Add</b>. The app icon appears on your home screen."] },
+  { id: "ipad", title: "iPad", steps: ["Open this page in <b>Safari</b>.", "Tap the <b>Share</b> button at the top right.", "Tap <b>Add to Home Screen</b>, then <b>Add</b>."] },
+  { id: "android", title: "Android phone or tablet", steps: ["Open this page in <b>Chrome</b>.", "Tap the <b>⋮</b> menu at the top right.", "Tap <b>Install app</b> (on some phones it says <b>Add to Home screen</b>, then choose <b>Install</b>).", "Tap <b>Install</b>. The app appears with your other apps."], extra: "Samsung Internet: tap the ≡ menu, then <b>Add page to</b> → <b>Home screen</b>." },
+  { id: "windows", title: "Windows computer", steps: ["Open this page in <b>Chrome</b> or <b>Microsoft Edge</b>.", "Chrome: click the <b>install icon</b> (a screen with a down arrow) at the right end of the address bar, or open the <b>⋮</b> menu → <b>Cast, save and share</b> → <b>Install page as app…</b>", "Edge: open the <b>…</b> menu → <b>Apps</b> → <b>Install this site as an app</b>.", "Click <b>Install</b>. The app opens in its own window and is added to the Start menu."] },
+  { id: "mac", title: "Mac", steps: ["Safari: open the <b>File</b> menu → <b>Add to Dock…</b> → <b>Add</b>.", "Chrome: click the <b>install icon</b> at the right end of the address bar, or open the <b>⋮</b> menu → <b>Cast, save and share</b> → <b>Install page as app…</b>", "Edge: open the <b>…</b> menu → <b>Apps</b> → <b>Install this site as an app</b>."] }
+];
+function renderInstallSteps() {
+  const mineId = PLATFORM === "other" ? "windows" : PLATFORM;
+  const mine = INSTALL_GUIDES.find(g => g.id === mineId);
+  const others = INSTALL_GUIDES.filter(g => g !== mine);
+  const sec = (g, isMine) => `<section class="${isMine ? "mine" : ""}"><h3>${g.title}${isMine ? '<span class="tag">This device</span>' : ""}</h3><ol>${g.steps.map(x => `<li>${x}</li>`).join("")}</ol>${g.extra ? `<p class="hint" style="margin:6px 0 0">${g.extra}</p>` : ""}</section>`;
+  let warn = "";
+  if (PLATFORM === "iphone" || PLATFORM === "ipad") { if (BROWSER !== "safari" && BROWSER !== "chrome-ios") warn = `<div class="notice warn">On iPhone and iPad, open this page in Safari to install it.</div>`; }
+  else if (BROWSER === "firefox") warn = `<div class="notice warn">Firefox can't install apps. Open this page in Chrome or Edge${PLATFORM === "mac" ? " or Safari" : ""} to install it.</div>`;
+  $("instSteps").innerHTML = warn + sec(mine, true) + `<details><summary>Steps for other devices</summary><div class="inst" style="margin-top:10px">${others.map(g => sec(g, false)).join("")}</div></details>`;
+}
+function refreshInstallUI() {
+  const installed = isInstalled();
+  $("installBtn").hidden = installed;
+  $("instReady").hidden = !window.__installEvt;
+}
+async function promptInstall() {
+  const evt = window.__installEvt;
+  if (!evt) return false;
+  evt.prompt();
+  const choice = await evt.userChoice.catch(() => null);
+  window.__installEvt = null; refreshInstallUI();
+  if (choice && choice.outcome === "accepted") { closeSheet("instSheet"); toast("Installing… open it from your home screen or apps list."); }
+  return true;
+}
 $("installBtn").addEventListener("click", async () => {
-  if (installEvt) { installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; $("installBtn").hidden = true; return; }
-  toast("On iPhone or iPad: tap the Share button, then “Add to Home Screen”.", 6000);
+  if (await promptInstall()) return;
+  renderInstallSteps(); refreshInstallUI(); openSheet("instSheet");
 });
-window.addEventListener("appinstalled", () => { $("installBtn").hidden = true; toast("Installed. Open it from your home screen or apps list."); });
-const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
-if (!standalone && /iPhone|iPad|iPod/.test(navigator.userAgent)) $("installBtn").hidden = false;
+$("instNow").addEventListener("click", promptInstall);
+window.addEventListener("beforeinstallprompt", () => setTimeout(refreshInstallUI, 0));
+window.addEventListener("appinstalled", () => { window.__installEvt = null; refreshInstallUI(); closeSheet("instSheet"); toast("Installed. Open it from your home screen or apps list."); });
+window.matchMedia("(display-mode: standalone)").addEventListener?.("change", refreshInstallUI);
+refreshInstallUI();
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").then(reg => {
