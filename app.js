@@ -288,7 +288,8 @@ function resetForm() {
   ["frontImg", "backImg"].forEach(i => { const im = $(i); if (im.src && im.src.startsWith("blob:") && !im.dataset.keep) URL.revokeObjectURL(im.src); im.removeAttribute("src"); im.dataset.keep = ""; });
   $("backImg").hidden = true; $("frontImg").hidden = false;
   $("retakeBtn").textContent = "Retake"; $("rotateBtn").hidden = false; $("backBtn").hidden = false;
-  ["progress", "readNote", "dupNote", "rawBox", "ferr", "delBtn", "removePhotoBtn"].forEach(i => $(i).hidden = true);
+  stopCamera();
+  ["progress", "readNote", "dupNote", "rawBox", "ferr", "delBtn", "removePhotoBtn", "qrNote"].forEach(i => $(i).hidden = true);
   document.querySelectorAll("#fields .filled").forEach(el => el.classList.remove("filled"));
   document.querySelectorAll("#fields .auto").forEach(el => el.remove());
   $("saveBtn").disabled = false;
@@ -298,7 +299,7 @@ function setPhotoButtons(has) {
   $("rotateBtn").hidden = !has || !(current && current.front);
   $("backBtn").hidden = !has;
 }
-function setStep(step) { $("pickStep").hidden = step !== "pick"; $("formStep").hidden = step === "pick"; }
+function setStep(step) { if (step !== "qr") stopCamera(); $("pickStep").hidden = step !== "pick"; $("formStep").hidden = step !== "form"; $("qrStep").hidden = step !== "qr"; }
 function openScan() {
   resetForm();
   current = { id: null, auto: new Set() };
@@ -403,6 +404,13 @@ async function runRead(side, rotate) {
     $("progBar").style.width = Math.round(p * 100) + "%";
     $("progText").textContent = m.status === "recognizing text" ? "Reading the card…" : /load|initializ/.test(m.status || "") ? "Preparing the card reader (first time only)…" : "Reading the card…";
   };
+  current.qrTried = current.qrTried || {};
+  if (!current.qrTried[side]) {
+    current.qrTried[side] = true;
+    $("progText").textContent = "Looking for a QR code…";
+    try { const t = await findQRInBitmap(src.bitmap); if (t) applyQR(t); } catch (_) { /* no QR reader available: carry on */ }
+    $("progText").textContent = "Reading the card…";
+  }
   let res;
   try {
     res = await readImage(src.bitmap, rotate);
@@ -444,6 +452,8 @@ function fillFields(p, onlyEmpty) {
   ["name", "title", "department", "company", "company_full", "mobile", "phone", "email", "fax", "website", "country", "address"].forEach(f => {
     const el = $("f_" + f); const v = (p[f] || "").trim();
     if (!v) return;
+    if (current.qrFields && current.qrFields.has(f)) return;          // QR code data is more reliable
+    if (current.edited && current.edited.has(f) && el.value.trim()) return;
     if (onlyEmpty && el.value.trim()) return;
     if (!onlyEmpty || !el.value.trim()) {
       el.value = v; el.classList.add("filled");
@@ -455,6 +465,7 @@ function fillFields(p, onlyEmpty) {
 }
 document.querySelectorAll("#fields input,#fields textarea").forEach(el => el.addEventListener("input", () => {
   el.classList.remove("filled"); const a = el.parentElement.querySelector(".auto"); if (a) a.remove();
+  if (current) { (current.edited = current.edited || new Set()).add(el.id.slice(2)); if (current.qrFields) current.qrFields.delete(el.id.slice(2)); }
   if (el.id === "f_name" || el.id === "f_email") checkDuplicate();
 }));
 
@@ -498,7 +509,7 @@ async function saveCard(mode) {
   if (!d.name || !d.company) { const er = $("ferr"); er.textContent = "Enter at least a name and a company."; er.hidden = false; return; }
   const existingCo = Object.keys(companyCounts()).find(k => k.toLowerCase() === d.company.toLowerCase()); if (existingCo) d.company = existingCo;
   if (!d.company_full) d.company_full = d.company;
-  const ocrText = current && current.ocr ? [current.ocr.front, current.ocr.back].filter(Boolean).join("\n") : "";
+  const ocrText = current ? [current.ocr && current.ocr.front, current.ocr && current.ocr.back, current.qr && "QR: " + current.qr].filter(Boolean).join("\n") : "";
   let rec;
   if (mode === "merge" && dupTarget) {
     rec = { ...dupTarget };
@@ -540,6 +551,154 @@ async function saveCard(mode) {
   }
 }
 async function askPersist() { try { if (navigator.storage && navigator.storage.persist && !(await navigator.storage.persisted())) await navigator.storage.persist(); } catch (_) {} }
+
+
+/* ---------- QR codes ---------- */
+const QR_LIB = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
+let jsqrP = null, nativeQR;   // nativeQR: undefined = not checked yet, null = not available
+function loadJsQR() {
+  if (window.jsQR) return Promise.resolve();
+  if (!jsqrP) {
+    jsqrP = (async () => {
+      const src = await blobURLFor(QR_LIB);
+      await new Promise((res, rej) => { const sc = document.createElement("script"); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error("QR reader failed to load")); document.head.appendChild(sc); });
+    })();
+    jsqrP.catch(() => { jsqrP = null; });
+  }
+  return jsqrP;
+}
+async function getNativeQR() {
+  if (nativeQR !== undefined) return nativeQR;
+  try { nativeQR = ("BarcodeDetector" in window && (await BarcodeDetector.getSupportedFormats()).includes("qr_code")) ? new BarcodeDetector({ formats: ["qr_code"] }) : null; }
+  catch (_) { nativeQR = null; }
+  return nativeQR;
+}
+async function decodeQR(canvas) {
+  const nd = await getNativeQR();
+  if (nd) { try { const r = await nd.detect(canvas); if (r && r.length) return r[0].rawValue; } catch (_) {} }
+  await loadJsQR();
+  const g = canvas.getContext("2d", { willReadFrequently: true });
+  const d = g.getImageData(0, 0, canvas.width, canvas.height);
+  const r = window.jsQR(d.data, d.width, d.height, { inversionAttempts: "attemptBoth" });
+  return r && r.data ? r.data : null;
+}
+async function findQRInBitmap(bmp) {
+  for (const size of [1000, 1600, 700]) {
+    const t = await decodeQR(drawScaled(bmp, size));
+    if (t) return t;
+  }
+  return null;
+}
+function fillFromQR(f) {
+  current.qrFields = current.qrFields || new Set();
+  ["name", "name_local", "title", "department", "company", "company_full", "mobile", "phone", "email", "fax", "website", "country", "address"].forEach(k => {
+    const v = (f[k] || "").trim(); if (!v) return;
+    const el = $("f_" + k);
+    if (current.edited && current.edited.has(k) && el.value.trim()) return;   // keep what the person typed
+    el.value = v; el.classList.add("filled");
+    const lab = el.parentElement.querySelector("label");
+    const old = lab && lab.querySelector(".auto"); if (old) old.remove();
+    if (lab) lab.insertAdjacentHTML("beforeend", `<span class="auto qr">QR</span>`);
+    current.auto.add(k); current.qrFields.add(k);
+  });
+  if (f.notes) { const el = $("f_notes"); if (!el.value.includes(f.notes)) el.value = el.value ? el.value + "\n" + f.notes : f.notes; }
+}
+function applyQR(text) {
+  const r = CardQR.parseQR(text);
+  const n = $("qrNote");
+  if (r.kind === "other") { n.className = "notice warn"; n.textContent = `That QR code holds ${r.summary || "something else"}, not contact details.`; n.hidden = false; return false; }
+  current.qr = text;
+  const f = { ...r.fields };
+  if (f.company_full || f.email) {
+    f.company = CardParser.parseCard([f.company_full, f.email].filter(Boolean).join("\n"), { companies: Object.keys(companyCounts()), domains: domainMap() }).company || f.company_full || "";
+  }
+  fillFromQR(f);
+  n.className = "notice ok";
+  n.textContent = r.kind === "contact" ? `Filled from the card's QR code${r.summary ? ` (${r.summary})` : ""}. Fields marked QR came from it.`
+    : r.kind === "link" ? `The card's QR code is a link. It was added to ${f.website ? "Website" : "Notes"}.`
+    : "The card's QR code holds text. It was added to Notes.";
+  n.hidden = false;
+  checkDuplicate();
+  return true;
+}
+
+let qrStream = null, qrTimer = 0, qrDevices = [], qrDeviceIdx = 0, qrBackTo = "pick";
+function stopCamera() {
+  clearTimeout(qrTimer); qrTimer = 0;
+  if (qrStream) { qrStream.getTracks().forEach(t => t.stop()); qrStream = null; }
+  const v = $("qrVideo"); if (v) { try { v.pause(); } catch (_) {} v.srcObject = null; }
+  const view = document.querySelector(".qrview"); if (view) view.classList.remove("found");
+}
+async function openQRScanner() {
+  if (!current) current = { id: null, auto: new Set() };
+  qrBackTo = $("formStep").hidden ? "pick" : "form";
+  setStep("qr"); $("fHint").hidden = true;
+  await startCamera();
+}
+async function startCamera(deviceId) {
+  stopCamera();
+  const st = $("qrStatus");
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { st.textContent = "This browser can't use the camera here. Use a photo of the QR code instead."; return; }
+  st.textContent = "Starting the camera…";
+  try {
+    qrStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+  } catch (e) {
+    const nm = e && e.name;
+    st.textContent = nm === "NotAllowedError" ? "Camera access is blocked. Allow the camera for this app in your browser or phone settings, or use a photo of the QR code instead."
+      : (nm === "NotFoundError" || nm === "OverconstrainedError") ? "No camera was found on this device. Use a photo of the QR code instead."
+      : "The camera couldn't start. Use a photo of the QR code instead.";
+    return;
+  }
+  if ($("qrStep").hidden) { stopCamera(); return; }   // sheet closed while the camera was starting
+  const v = $("qrVideo"); v.srcObject = qrStream; await v.play().catch(() => {});
+  try { qrDevices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput"); $("qrSwitch").hidden = qrDevices.length < 2; } catch (_) {}
+  if (!(await getNativeQR())) {
+    try { await loadJsQR(); }
+    catch (_) { st.textContent = navigator.onLine ? "The QR reader couldn't load. Try again in a moment." : "The QR reader needs an internet connection the first time it's used on this device."; return; }
+  }
+  st.textContent = "Point the camera at the QR code on the card.";
+  const c = document.createElement("canvas");
+  const tick = async () => {
+    if (!qrStream) return;
+    if (v.readyState >= 2 && v.videoWidth) {
+      const k = Math.min(1, 800 / Math.max(v.videoWidth, v.videoHeight));
+      c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
+      c.getContext("2d", { willReadFrequently: true }).drawImage(v, 0, 0, c.width, c.height);
+      let t = null; try { t = await decodeQR(c); } catch (_) {}
+      if (t && qrStream) {
+        document.querySelector(".qrview").classList.add("found");
+        try { navigator.vibrate && navigator.vibrate(60); } catch (_) {}
+        setTimeout(() => qrFound(t), 250);
+        return;
+      }
+    }
+    qrTimer = setTimeout(tick, 160);
+  };
+  tick();
+}
+function qrFound(text) {
+  stopCamera();
+  setStep("form");
+  $("fTitle").textContent = current.id ? "Edit card" : "Check and save";
+  $("photoCol").hidden = false; $("formStep").classList.add("has-photo");
+  if (!current.front && !$("frontImg").getAttribute("src")) { $("frontImg").hidden = true; setPhotoButtons(false); }
+  if (!applyQR(text)) return;
+  if (!current.front && !current.id) $("qrNote").textContent += " Tap Add photo if you also want to keep a picture of the card.";
+}
+$("qrBtn").addEventListener("click", openQRScanner);
+$("qrBtn2").addEventListener("click", openQRScanner);
+$("qrCancel").addEventListener("click", () => setStep(qrBackTo));
+$("qrSwitch").addEventListener("click", () => { if (qrDevices.length < 2) return; qrDeviceIdx = (qrDeviceIdx + 1) % qrDevices.length; startCamera(qrDevices[qrDeviceIdx].deviceId); });
+$("qrFromPhoto").addEventListener("click", () => $("qrFile").click());
+$("qrFile").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  $("qrStatus").textContent = "Looking for a QR code in the photo…";
+  let t = null;
+  try { t = await findQRInBitmap(await loadBitmap(f)); }
+  catch (_) { $("qrStatus").textContent = navigator.onLine ? "That photo couldn't be checked. Try another one." : "The QR reader needs an internet connection the first time it's used on this device."; return; }
+  if (t) qrFound(t); else $("qrStatus").textContent = "No QR code was found in that photo. Try a closer photo with the QR code filling more of the picture.";
+});
+document.addEventListener("visibilitychange", () => { if (document.hidden && qrStream) { stopCamera(); $("qrStatus").textContent = "Camera paused."; } else if (!document.hidden && !$("qrStep").hidden && !$("formSheet").hidden && !qrStream) startCamera(); });
 
 /* ---------- backup / import ---------- */
 $("menuBtn").addEventListener("click", () => { openSheet("bkSheet"); updateBackupInfo(); });
